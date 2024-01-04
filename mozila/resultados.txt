@@ -1,0 +1,186 @@
+
+  CREATE OR REPLACE FORCE EDITIONABLE VIEW "LABO"."VIMAGENOLOGIAPLUS" ("IDLINEA", "NOMBRECLIENTE", "CLIENTE", "FECHANACIMIENTO", "FECHAEMISION", "IDS", "MOVIMIENTOS", "MEDICO", "MEDICOREFIERE", "ARTICULO", "IDCONSULTA") AS 
+  (SELECT ROWNUM AS IDLINEA,
+           NOMBRECLIENTE,
+           CLIENTE,
+           FECHANACIMIENTO,
+           FECHAEMISION,
+           IDS,
+           MOVIMIENTOS,
+           REPLACE (
+              DECODE (MEDICO,  'L--', '',  '-;L-', '',  '-', '',  MEDICO),
+              '-;',
+              '')
+              MEDICO,
+           REPLACE (
+              DECODE (MEDICOREFIERE,
+                      'L--', '',
+                      '-;L-', '',
+                      '-', '',
+                      MEDICOREFIERE),
+              '-;',
+              '')
+              MEDICOREFIERE,
+           ARTICULO,
+           IDCONSULTA
+      FROM (  SELECT NOMBRECLIENTE,
+                     REGEXP_REPLACE (
+                        LISTAGG (
+                           CLIENTE,
+                           ';')
+                        WITHIN GROUP (ORDER BY
+                                         NOMBRECLIENTE,
+                                         FECHANACIMIENTO,
+                                         FECHAEMISION),
+                        '([^;]*)(;\1)+($|;)',
+                        '\1\3')
+                        CLIENTE,
+                     FECHANACIMIENTO,
+                     FECHAEMISION,
+                     REGEXP_REPLACE (
+                        LISTAGG (
+                           ID,
+                           ';')
+                        WITHIN GROUP (ORDER BY
+                                         NOMBRECLIENTE,
+                                         FECHANACIMIENTO,
+                                         FECHAEMISION),
+                        '([^;]*)(;\1)+($|;)',
+                        '\1\3')
+                        IDS,
+                     REGEXP_REPLACE (
+                        LISTAGG (
+                           MOVIMIENTO,
+                           ';')
+                        WITHIN GROUP (ORDER BY
+                                         NOMBRECLIENTE,
+                                         FECHANACIMIENTO,
+                                         FECHAEMISION),
+                        '([^;]*)(;\1)+($|;)',
+                        '\1\3')
+                        MOVIMIENTOS,
+                     REGEXP_REPLACE (
+                        LISTAGG (
+                           MEDICO,
+                           ';')
+                        WITHIN GROUP (ORDER BY
+                                         NOMBRECLIENTE,
+                                         FECHANACIMIENTO,
+                                         FECHAEMISION),
+                        '([^;]*)(;\1)+($|;)',
+                        '\1\3')
+                        MEDICO,
+                     REGEXP_REPLACE (
+                        LISTAGG (
+                           MEDICOREFIERE,
+                           ';')
+                        WITHIN GROUP (ORDER BY
+                                         NOMBRECLIENTE,
+                                         FECHANACIMIENTO,
+                                         FECHAEMISION),
+                        '([^;]*)(;\1)+($|;)',
+                        '\1\3')
+                        MEDICOREFIERE,
+                     LISTAGG (
+                        ARTICULO,
+                        ';')
+                     WITHIN GROUP (ORDER BY
+                                      NOMBRECLIENTE,
+                                      FECHANACIMIENTO,
+                                      FECHAEMISION)
+                        ARTICULO,
+                     LISTAGG (
+                        IDCONSULTA,
+                        ';')
+                     WITHIN GROUP (ORDER BY
+                                      NOMBRECLIENTE,
+                                      FECHANACIMIENTO,
+                                      FECHAEMISION)
+                        IDCONSULTA
+                FROM (SELECT 'L-' || X.ID AS ID,
+                             'L-' || X.MOV || '-' || X.MOVID AS MOVIMIENTO,
+                             X.FECHAEMISION,
+                             'L-' || NVL (X.PACIENTE, X.CLIENTE) AS CLIENTE,
+                             NVL (C3.NOMBRE, C1.NOMBRE) NOMBRECLIENTE,
+                             NVL (C3.FECHANACIMIENTO, C1.FECHANACIMIENTO)
+                                FECHANACIMIENTO,
+                             X.MEDICORX || '-' || C2.NOMBRE AS MEDICO,
+                             CASE
+                                WHEN X.MEDICO IS NULL THEN NULL
+                                ELSE (X.MEDICO || '-' || C4.NOMBRE)
+                             END
+                                MEDICOREFIERE,
+                                A.ARTICULO
+                             || '-'
+                             || NVL (A.DESCRIPCION2, A.DESCRIPCION1)
+                                AS ARTICULO,
+                             X.IDCONSULTA
+                        FROM VENTA X
+                             JOIN VENTAD Y
+                                ON X.ID = Y.ID
+                             LEFT JOIN CTE C1
+                                ON X.CLIENTE = C1.CLIENTE
+                             LEFT JOIN CTE C2
+                                ON X.MEDICORX = C2.CLIENTE
+                             LEFT JOIN CTE C3
+                                ON X.PACIENTE = C3.CLIENTE
+                             LEFT JOIN CTE C4
+                                ON X.MEDICO = C4.CLIENTE
+                             JOIN ART A
+                                ON Y.ARTICULO = A.ARTICULO
+                       WHERE (X.MOV IN ('Orden Laboratorio', 'Nota de Cargo')
+                              OR (X.MOV IN ('Factura', 'Credito Fiscal')
+                                  AND Y.APLICA IS NULL))
+                             AND X.ESTATUS IN ('CONCLUIDO', 'PENDIENTE')
+                             AND A.PREFIJO IN ('LM', 'RX')
+                             AND X.FECHAEMISION >= TRUNC(SYSDATE - 50) 
+                             AND ( (    X.CLIENTE = 'C000374'
+                                    AND X.PACIENTE IS NOT NULL
+                                    AND X.PACIENTE != 'C000374'
+                                    AND X.IDINGRESO IS NULL)
+                                  OR X.CLIENTE != 'C000374')
+                      UNION ALL                                      -- CEGISA
+                      SELECT 'C' || '-' || X.ID,
+                             'C' || '-' || X.MOV || '-' || MOVID MOVIMIENTO,
+                             X.FECHAEMISION,
+                             'C' || '-' || NVL (X.PACIENTE, X.CLIENTE)
+                                AS CLIENTE,
+                             NVL (C3.NOMBRE, C1.NOMBRE) AS NOMBRECLIENTE,
+                             NVL (C3.FECHANACIMIENTO, C1.FECHANACIMIENTO)
+                                FECHANACIMIENTO,
+                             C2.CTELABO || '-' || C6.NOMBRE MEDICO,
+                             C5.CLIENTE || '-' || C5.NOMBRE MEDICOREFIERE,
+                             A.ARTICULO || '-' || A.DESCRIPCION1 ARTICULO,
+                             X.IDCONSULTA
+                        FROM CEGI.VENTA X
+                             JOIN CEGI.VENTAD Y
+                                ON X.ID = Y.ID
+                             LEFT JOIN CEGI.CTE C1
+                                ON X.CLIENTE = C1.CLIENTE
+                             LEFT JOIN CEGI.CTE C2
+                                ON X.MEDICOULTRA = C2.CLIENTE -- MEDICOULTRA CEGISA C2
+                             LEFT JOIN LABO.CTE C6
+                                ON C6.CLIENTE = C2.CTELABO -- MEDICOULTRA LABORATORIO C6
+                             LEFT JOIN CEGI.CTE C3
+                                ON X.PACIENTE = C3.CLIENTE
+                             LEFT JOIN CEGI.CTE C4
+                                ON X.MEDICO = C4.CLIENTE   -- MEDICO CEGISA C4
+                             LEFT JOIN LABO.CTE C5
+                                ON C5.CLIENTE = C4.CTELABO -- MEDICO LABORATORIO C5
+                             JOIN CEGI.ART A
+                                ON Y.ARTICULO = A.ARTICULO
+                             LEFT JOIN CEGI.ARTLINEA L
+                                ON L.ID = A.IDARTLINEA
+                       WHERE (X.MOV IN ('Nota de Cargo', 'Cargo a Paciente')
+                              OR (X.MOV IN ('Factura', 'Credito Fiscal')
+                                  AND Y.APLICA IS NULL))
+                             AND X.ESTATUS IN ('CONCLUIDO', 'PENDIENTE')
+                             AND (A.ESULTRA = 1
+                                  OR A.PREFIJO IN ('LM', 'RX'))
+                             AND (L.NOMBRE != 'GINECOLOGIA'
+                                  OR A.PREFIJO IN ('LM', 'RX'))
+                             AND X.FECHAEMISION >= TRUNC(SYSDATE - 50))
+            GROUP BY FECHAEMISION,
+                     NOMBRECLIENTE,
+                     FECHANACIMIENTO,
+                     IDCONSULTA));

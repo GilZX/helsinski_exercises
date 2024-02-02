@@ -1,0 +1,225 @@
+ CREATE OR REPLACE FORCE EDITIONABLE VIEW "CEGI"."V_RECALCULO" ("IDLINEA", "TIPO", "PERSONAL", "NOMBRE", "TOTAL", "RENTA", "AFP", "ISSS", "EXCESO", "VALORPORCENTAJE", "CUOTA", "APAGAR", "RECALCULO") AS 
+  SELECT ROWNUM IDLINEA,
+            TIPO,
+            PERSONAL,
+            NOMBRE,
+            TOTAL,
+            RENTA,
+            AFP,
+            ISSS,
+            EXCESO,
+            VALORPORCENTAJE,
+            CUOTA,
+            APAGAR,
+            ROUND (RECALCULO, 2) RECALCULO
+       FROM ( (SELECT 'Anual' TIPO,
+                      X.PERSONAL,
+                      REPLACE (
+                            Y.NOMBRE
+                         || ' '
+                         || Y.PRIMERAPELLIDO
+                         || ' '
+                         || Y.SEGUNDOAPELLIDO
+                         || ' '
+                         || Y.APELLIDOCASADA,
+                         '  ',
+                         '')
+                         NOMBRE,
+                      TOTAL,
+                      RENTA,
+                      AFP,
+                      X.ISSS,
+                      EXCESO,
+                      VALORPORCENTAJE,
+                      CUOTA,
+                      NVL (VALORPORCENTAJE, 0) + NVL (CUOTA, 0) APAGAR,
+                      (VALORPORCENTAJE + CUOTA) - RENTA RECALCULO
+                 FROM (  SELECT PERSONAL,
+                                SUM (TOTALPERCIBIDO) TOTAL,
+                                SUM (RETRENTA) RENTA,
+                                SUM (RETAFP) AFP,
+                                SUM (RETSEGURO) ISSS,
+                                (  SUM (TOTALPERCIBIDO)
+                                 - SUM (RETAFP)
+                                 - SUM (RETSEGURO))
+                                   GRAVADO,
+                                getValoresRentaRecalculo (
+                                   (  SUM (TOTALPERCIBIDO)
+                                    - SUM (RETAFP)
+                                    - SUM (RETSEGURO)),
+                                   'Anual',
+                                   'Exceso')
+                                   Exceso,
+                                getValoresRentaRecalculo (
+                                   (  SUM (TOTALPERCIBIDO)
+                                    - SUM (RETAFP)
+                                    - SUM (RETSEGURO)),
+                                   'Anual',
+                                   'ValorPorcentaje')
+                                   ValorPorcentaje,
+                                getValoresRentaRecalculo (
+                                   (  SUM (TOTALPERCIBIDO)
+                                    - SUM (RETAFP)
+                                    - SUM (RETSEGURO)),
+                                   'Anual',
+                                   'Cuota')
+                                   Cuota,
+                                'Anual' Tipo
+                           FROM (SELECT B.PERSONAL,
+                                        DECODE (
+                                           A.MOV,
+                                           'Aguinaldo', (CASE
+                                                            WHEN B.TOTALPERCIBIDO <=
+                                                                    730.00
+                                                            THEN
+                                                               0
+                                                            ELSE
+                                                               B.TOTALPERCIBIDO
+                                                               - 730.00
+                                                         END),
+                                           B.TOTALPERCIBIDO)
+                                        - NVL (
+                                             (SELECT SUM (
+                                                        DECODE (NOMINACONCEPTO,
+                                                                260, (0),
+                                                                (IMPORTE)))
+                                                FROM NOMINADESGLOSE
+                                               WHERE ID = A.ID
+                                                     AND RENGLON = B.RENGLON
+                                                     AND NOMINACONCEPTO IN
+                                                            (121, 122, 249, 260)),
+                                             0)
+                                           TOTALPERCIBIDO,
+                                        B.RETRENTA
+                                        - NVL (
+                                             (SELECT SUM (
+                                                        DECODE (
+                                                           NOMINACONCEPTO,
+                                                           260, (IMPORTE * -1),
+                                                           (IMPORTE)))
+                                                FROM NOMINADESGLOSE
+                                               WHERE ID = A.ID
+                                                     AND RENGLON = B.RENGLON
+                                                     AND NOMINACONCEPTO IN
+                                                            (121, 122, 249, 260)),
+                                             0)
+                                           RETRENTA,
+                                        B.RETAFP,
+                                        B.RETSEGURO
+                                   FROM NOMINA A, NOMINAD B
+                                  WHERE A.ID = B.ID
+                                        AND A.ESTATUS IN
+                                               ('SINAFECTAR', 'CONCLUIDO')
+                                        AND YEAR (A.FECHANOMINA) = YEAR (SYSDATE))
+                       GROUP BY PERSONAL) X,
+                      PERSONAL Y
+                WHERE     X.PERSONAL = Y.PERSONAL
+                      AND Y.ESTATUS = 'ALTA'
+                      AND X.RENTA != 0
+               UNION ALL                      /*SEMESTRAL - PRIMER RECÁLCULO*/
+               SELECT 'Semestral' TIPO,
+                      X.PERSONAL,
+                      REPLACE (
+                            Y.NOMBRE
+                         || ' '
+                         || Y.PRIMERAPELLIDO
+                         || ' '
+                         || Y.SEGUNDOAPELLIDO
+                         || ' '
+                         || Y.APELLIDOCASADA,
+                         '  ',
+                         '')
+                         NOMBRE,
+                      TOTAL,
+                      RENTA,
+                      AFP,
+                      X.ISSS,
+                      EXCESO,
+                      VALORPORCENTAJE,
+                      CUOTA,
+                      VALORPORCENTAJE + CUOTA APAGAR,
+                      (VALORPORCENTAJE + CUOTA) - RENTA RECALCULO
+                 FROM (  SELECT PERSONAL,
+                                SUM (TOTALPERCIBIDO) TOTAL,
+                                SUM (RETRENTA) RENTA,
+                                SUM (RETAFP) AFP,
+                                SUM (RETSEGURO) ISSS,
+                                (  SUM (TOTALPERCIBIDO)
+                                 - SUM (RETAFP)
+                                 - SUM (RETSEGURO))
+                                   GRAVADO,
+                                getValoresRentaRecalculo (
+                                   (  SUM (TOTALPERCIBIDO)
+                                    - SUM (RETAFP)
+                                    - SUM (RETSEGURO)),
+                                   'Semestral',
+                                   'Exceso')
+                                   Exceso,
+                                getValoresRentaRecalculo (
+                                   (  SUM (TOTALPERCIBIDO)
+                                    - SUM (RETAFP)
+                                    - SUM (RETSEGURO)),
+                                   'Semestral',
+                                   'ValorPorcentaje')
+                                   ValorPorcentaje,
+                                getValoresRentaRecalculo (
+                                   (  SUM (TOTALPERCIBIDO)
+                                    - SUM (RETAFP)
+                                    - SUM (RETSEGURO)),
+                                   'Semestral',
+                                   'Cuota')
+                                   Cuota,
+                                'Semestral' Tipo
+                           FROM (SELECT B.PERSONAL,
+                                        DECODE (
+                                           A.MOV,
+                                           'Aguinaldo', (CASE
+                                                            WHEN B.TOTALPERCIBIDO <=
+                                                                    730.00
+                                                            THEN
+                                                               0
+                                                            ELSE
+                                                               B.TOTALPERCIBIDO
+                                                               - 730.00
+                                                         END),
+                                           B.TOTALPERCIBIDO)
+                                        - NVL (
+                                             (SELECT SUM (
+                                                        DECODE (NOMINACONCEPTO,
+                                                                260, (0),
+                                                                (IMPORTE * -1)))
+                                                FROM NOMINADESGLOSE
+                                               WHERE ID = A.ID
+                                                     AND RENGLON = B.RENGLON
+                                                     AND NOMINACONCEPTO IN
+                                                            (121, 122, 249, 260)),
+                                             0)
+                                           TOTALPERCIBIDO,
+                                        B.RETRENTA
+                                        - NVL (
+                                             (SELECT SUM (
+                                                        DECODE (NOMINACONCEPTO,
+                                                                260, (IMPORTE),
+                                                                (IMPORTE) * -1))
+                                                FROM NOMINADESGLOSE
+                                               WHERE ID = A.ID
+                                                     AND RENGLON = B.RENGLON
+                                                     AND NOMINACONCEPTO IN
+                                                            (121, 122, 249, 260)),
+                                             0)
+                                           RETRENTA,
+                                        B.RETAFP,
+                                        B.RETSEGURO
+                                   FROM NOMINA A, NOMINAD B
+                                  WHERE A.ID = B.ID
+                                        AND A.ESTATUS IN
+                                               ('SINAFECTAR', 'CONCLUIDO')
+                                        AND YEAR (A.FECHANOMINA) = YEAR (SYSDATE)
+                                        AND MONTH (A.FECHANOMINA) <= 6)
+                       GROUP BY PERSONAL) X,
+                      PERSONAL Y
+                WHERE     X.PERSONAL = Y.PERSONAL
+                      AND Y.ESTATUS = 'ALTA'
+                      AND X.RENTA != 0))
+      WHERE ROUND (RECALCULO, 2) != 0
+   ORDER BY RECALCULO ASC;

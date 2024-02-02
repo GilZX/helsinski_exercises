@@ -1,17 +1,29 @@
-import React, { useState } from 'react'
+import React, { useState,useEffect  } from 'react'
+import axios from 'axios'
+
 
 const App = () => {
-  const [persons, setPersons] = useState([
-    { name: 'Arto Hellas' , number:"503 + 75 01 55 40"}
-  ])
-
- 
+  const [persons, setPersons] = useState([ ])
   const [personsForFilter,setPersonsForFilter]=useState([{name:"" ,number:""}])
   const [newName, setNewName] = useState('Digite Un Nombre')
   const [currencyNote, setCurrencyNote] = useState("")
   const [currencyNumber, setCurrencyNumber] = useState("")
   const [currencyFilter, setCurrencyFilter] = useState("")
   const [estatusFilter, setEstatusFilter] = useState(false)
+
+
+  useEffect(() => {
+     axios.get("http://localhost:3001/persons")
+    .then(elements=>{
+      const get_persons=elements.data
+      console.log(get_persons)
+      setPersons(get_persons)
+    })
+    
+  }, []);
+
+
+
 
 
 
